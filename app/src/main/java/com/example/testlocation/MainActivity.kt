@@ -16,9 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.lifecycleScope // [FIX 1] Add this import
+import androidx.lifecycle.lifecycleScope
 import com.example.testlocation.logic.LocationGPS
-import com.example.testlocation.logic.LocationViewModel // Ensure this matches your package
+import com.example.testlocation.logic.LocationViewModel
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.*
@@ -35,20 +35,14 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var hasPermissions by remember { mutableStateOf(false) }
+            var currentMode by remember { mutableStateOf("Initializing...") }
 
-            // UI State for Status Dashboard
-            var isIndoor by remember { mutableStateOf(false) }
-            var isPdrActive by remember { mutableStateOf(false) }
-            var isInZone by remember { mutableStateOf(false) }
-
-            // Permission Launcher
             val launcher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
             ) { perms ->
                 val fine = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true
                 if (fine) {
                     hasPermissions = true
-                    // [FIX 2] Use 'lifecycleScope' directly (it belongs to ComponentActivity)
                     locationGPS.startTracking(locationViewModel, lifecycleScope)
                 }
             }
@@ -63,11 +57,9 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            // Listen to Logic Status Changes
             DisposableEffect(Unit) {
-                locationGPS.onStatusChanged = { indoor, pdr ->
-                    isIndoor = indoor
-                    isPdrActive = pdr
+                locationGPS.onStatusChanged = { mode ->
+                    currentMode = mode
                 }
                 onDispose { locationGPS.stopTracking() }
             }
@@ -75,14 +67,7 @@ class MainActivity : ComponentActivity() {
             if (hasPermissions) {
                 TestScreen(
                     locationViewModel = locationViewModel,
-                    isIndoor = isIndoor,
-                    isPdrActive = isPdrActive,
-                    isInZone = isInZone,
-                    onToggleZone = {
-                        val newState = !isInZone
-                        isInZone = newState
-                        locationGPS.setZoneStatus(newState)
-                    }
+                    currentMode = currentMode
                 )
             } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -96,10 +81,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TestScreen(
     locationViewModel: LocationViewModel,
-    isIndoor: Boolean,
-    isPdrActive: Boolean,
-    isInZone: Boolean,
-    onToggleZone: () -> Unit
+    currentMode: String
 ) {
     val locationState by locationViewModel.location
     val currentLatLng = locationState?.let { LatLng(it.latitude, it.longitude) } ?: LatLng(0.0, 0.0)
@@ -108,7 +90,6 @@ fun TestScreen(
         position = CameraPosition.fromLatLngZoom(currentLatLng, 18f)
     }
 
-    // Auto-follow camera
     LaunchedEffect(currentLatLng) {
         if (currentLatLng.latitude != 0.0) {
             cameraPositionState.position = CameraPosition.fromLatLngZoom(currentLatLng, 18f)
@@ -116,7 +97,6 @@ fun TestScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // 1. Google Map
         Box(Modifier.weight(1f)) {
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
@@ -126,56 +106,34 @@ fun TestScreen(
                     Marker(
                         state = MarkerState(position = currentLatLng),
                         title = "Current",
-                        snippet = if (isPdrActive) "PDR Mode" else "GPS Mode"
+                        snippet = currentMode
                     )
                 }
             }
         }
 
-        // 2. Control Dashboard
         Column(
             Modifier
                 .background(Color.White)
                 .padding(16.dp)
         ) {
-            Text("Location Logic Tester", style = MaterialTheme.typography.titleLarge)
+            Text("Auto-Switching Tracker", style = MaterialTheme.typography.titleLarge)
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Indoor Detected: ", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    text = if(isIndoor) "YES" else "NO",
-                    color = if(isIndoor) Color.Red else Color.Green,
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Current System: ", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    text = if(isPdrActive) "PDR (Steps)" else "GPS (Satellite)",
-                    color = if(isPdrActive) Color.Blue else Color.Gray,
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Button(
-                onClick = onToggleZone,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isInZone) Color.Green else Color.Gray
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isInZone) "Status: INSIDE ZONE" else "Status: OUTSIDE ZONE (Tap to Enter)")
-            }
-
+            Text("Current Mode:", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Tip: PDR only activates if Indoor=YES AND Zone=INSIDE",
+                text = currentMode,
+                color = if (currentMode.contains("GPS")) Color.Blue else Color.Red,
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Logic: Every 60s, checks accuracy.\n" +
+                        "< 20m Accuracy -> GPS Mode\n" +
+                        "> 20m Accuracy -> Network (Wifi/Cell) + PDR Mode",
                 fontSize = 12.sp,
-                color = Color.Gray,
-                modifier = Modifier.padding(top = 8.dp)
+                color = Color.Gray
             )
         }
     }

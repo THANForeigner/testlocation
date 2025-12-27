@@ -19,8 +19,8 @@ class IndoorDetector(private val context: Context) {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private val INDOOR_SNR_THRESHOLD = 18.0f
     private val OUTDOOR_SNR_THRESHOLD = 28.0f
-    private val MIN_OUTDOOR_SATELLITES = 7
-    private val MAX_INDOOR_SATELLITES = 3
+    private val MIN_OUTDOOR_SATELLITES = 9
+    private val MAX_INDOOR_SATELLITES = 2
     private val handler = Handler(Looper.getMainLooper())
 
     @RequiresApi(Build.VERSION_CODES.N)
